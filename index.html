@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1B1D22">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="둘이서, 지방도">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>둘이서, 지방도</title>
+<link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  :root{
+    --bg:#1B1D22; --card:#24272D; --line:#3A3D43; --sub:#9A9C9F;
+    --text:#EDE9E1; --body:#C7C4BC; --amber:#F0B429; --green:#3E6B4F;
+    --clay:#C1652F; --slate:#2C3038; --red:#B4453C;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font-family:'Noto Sans KR',sans-serif;padding-bottom:env(safe-area-inset-bottom)}
+  .disp{font-family:'Black Han Sans',sans-serif;font-weight:400}
+  .wrap{max-width:680px;margin:0 auto;padding:0 16px}
+  header{padding-top:calc(24px + env(safe-area-inset-top))}
+  .badge{display:inline-block;background:var(--green);border:2px solid var(--amber);
+    border-radius:6px;padding:1px 7px;font-size:10px;letter-spacing:2px;color:var(--amber);
+    vertical-align:6px;margin-right:8px}
+  h1{display:inline;font-size:26px;margin:0;font-family:'Black Han Sans',sans-serif;font-weight:400}
+  .tagline{color:var(--sub);font-size:13px;margin:6px 0 18px}
+  .tabs{display:flex;gap:6px;margin-bottom:18px}
+  .tabs button{flex:1;padding:9px 2px;border:0;border-radius:99px;font-size:13px;
+    font-family:inherit;background:var(--card);color:var(--sub)}
+  .tabs button.on{background:var(--amber);color:var(--bg);font-weight:500}
+  .stats{color:var(--sub);font-size:13px;margin-bottom:14px;display:flex;gap:16px;flex-wrap:wrap}
+  .stats b{color:var(--text)}
+  .empty{text-align:center;padding:56px 16px;color:var(--sub);font-size:14px;line-height:1.8}
+  .sectlabel{color:var(--sub);font-size:12px;margin:0 0 8px}
+  .roadchips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:18px}
+  .rchip{font-size:11px;padding:3px 10px;border-radius:99px;border:1px solid var(--line);
+    color:var(--body);background:var(--card)}
+  .rchip b{color:var(--amber);font-weight:500}
+  /* timeline */
+  .tl{position:relative;padding-left:30px}
+  .tl:before{content:'';position:absolute;left:8px;top:2px;bottom:2px;width:1px;
+    background:repeating-linear-gradient(to bottom,var(--amber) 0 8px,transparent 8px 16px)}
+  .entry{position:relative;margin-bottom:18px}
+  .entry:before{content:'';position:absolute;left:-28px;top:10px;width:11px;height:11px;
+    border-radius:50%;background:var(--bg);border:2px solid var(--amber)}
+  .card{background:var(--card);border-radius:14px;padding:15px}
+  .row{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+  .name{font-family:'Black Han Sans',sans-serif;font-size:17px;line-height:1.3}
+  .meta{color:var(--sub);font-size:12px;margin-top:3px}
+  .tags{display:flex;flex-wrap:wrap;gap:5px;margin:9px 0 7px}
+  .tag{font-size:11px;padding:2px 9px;border-radius:99px;color:#fff}
+  .gradetag{font-size:11px;padding:2px 9px;border-radius:5px;border:1px solid var(--amber);
+    color:var(--amber);background:transparent}
+  .lanetag{font-size:11px;padding:2px 9px;border-radius:5px;border:1px solid var(--line);
+    color:var(--body)}
+  .memo{color:var(--body);font-size:14px;margin:8px 0 0;line-height:1.6;white-space:pre-wrap}
+  .icobtn{background:none;border:0;color:var(--sub);font-size:15px;padding:2px 4px}
+  .waves{letter-spacing:2px;font-size:13px}
+  .navbtn{width:100%;margin-top:9px;border-radius:99px;padding:8px;
+    font-size:12px;font-family:inherit;background:transparent;color:var(--amber);
+    border:1px solid var(--amber)}
+  .navbtn.ghost{color:var(--sub);border-color:var(--line)}
+  .btnrow{display:flex;gap:8px;margin-top:9px}
+  .btnrow>button{flex:1;margin-top:0}
+  /* map */
+  #map{height:340px;border-radius:14px;background:var(--card);margin-bottom:14px}
+  .leaflet-container{background:#2a2d33}
+  .drivepanel{background:var(--card);border-radius:14px;padding:16px;margin-bottom:14px}
+  .live{display:flex;gap:22px;margin-bottom:14px}
+  .live div span{display:block;color:var(--sub);font-size:11px;margin-bottom:2px}
+  .live div b{font-family:'Black Han Sans',sans-serif;font-size:24px;font-weight:400}
+  .bigbtn{width:100%;border:0;border-radius:12px;padding:15px;font-size:15px;
+    font-family:inherit;font-weight:500}
+  .start{background:var(--amber);color:var(--bg)}
+  .stop{background:var(--red);color:#fff}
+  .statusline{font-size:12px;color:var(--sub);margin-top:10px;text-align:center}
+  .poi{background:var(--card);border-radius:14px;padding:15px;margin-bottom:14px}
+  .poiitem{border-top:1px solid var(--line);padding:9px 0}
+  .poiitem:first-of-type{border-top:0}
+  .poiitem b{font-size:14px;font-weight:500}
+  .poiitem div{color:var(--sub);font-size:12px;margin-top:2px}
+  /* discover */
+  .filters{display:flex;gap:7px;overflow-x:auto;padding-bottom:8px;margin-bottom:14px;
+    scrollbar-width:none}
+  .filters::-webkit-scrollbar{display:none}
+  .filters button{flex:0 0 auto;padding:6px 14px;border:0;border-radius:99px;font-size:12px;
+    font-family:inherit;background:var(--card);color:var(--sub);white-space:nowrap}
+  .filters button.on{background:var(--amber);color:var(--bg)}
+  .grid{display:grid;gap:13px}
+  @media(min-width:600px){.grid{grid-template-columns:1fr 1fr}}
+  .region{color:var(--sub);font-size:12px;margin-bottom:2px}
+  .roadinfo{color:var(--sub);font-size:12px;margin-bottom:8px}
+  .desc{color:var(--body);font-size:14px;line-height:1.6;margin:0 0 11px}
+  .acts{display:flex;gap:8px}
+  .acts button{flex:1;border:0;border-radius:99px;padding:8px 4px;font-size:12px;
+    font-family:inherit;color:var(--text);background:var(--slate)}
+  .acts .on{background:var(--clay)}
+  .acts .went{background:var(--green)}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+  .chip{background:var(--slate);border-radius:99px;padding:5px 8px 5px 12px;font-size:12px;
+    display:flex;align-items:center;gap:6px}
+  .chip button{background:none;border:0;color:var(--sub);font-size:13px;padding:0}
+  /* fab */
+  .fab{position:fixed;right:18px;bottom:calc(18px + env(safe-area-inset-bottom));
+    width:56px;height:56px;border-radius:50%;border:0;background:var(--amber);
+    color:var(--bg);font-size:28px;line-height:1;box-shadow:0 6px 20px rgba(0,0,0,.45);z-index:30}
+  /* modal */
+  .backdrop{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;
+    align-items:flex-end;justify-content:center;z-index:60}
+  @media(min-width:600px){.backdrop{align-items:center}}
+  .sheet{width:100%;max-width:470px;background:var(--card);border-radius:20px 20px 0 0;
+    padding:20px 20px calc(20px + env(safe-area-inset-bottom));max-height:90vh;overflow-y:auto}
+  @media(min-width:600px){.sheet{border-radius:20px}}
+  label{display:block;font-size:12px;color:var(--sub);margin:0 0 5px}
+  input,textarea,select{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--line);
+    border-radius:10px;padding:10px;font-size:14px;font-family:inherit;margin-bottom:13px}
+  textarea{resize:vertical}
+  .two{display:flex;gap:11px}
+  .two>div{flex:1}
+  .pick{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:13px}
+  .pick button{border:1px solid var(--line);background:var(--bg);color:var(--sub);
+    border-radius:99px;padding:5px 11px;font-size:12px;font-family:inherit}
+  .rate{display:flex;gap:12px;margin-bottom:13px}
+  .rate button{background:none;border:0;font-size:20px;padding:0;color:#4A4D53}
+  .rate button.on{color:var(--amber)}
+  .btns{display:flex;gap:8px;margin-top:4px}
+  .btns button{flex:1;border:0;border-radius:99px;padding:12px;font-size:14px;font-family:inherit}
+  .cancel{background:var(--slate);color:var(--sub)}
+  .save{background:var(--amber);color:var(--bg);font-weight:500}
+  .save:disabled{background:var(--line);color:#6C6F75}
+  .note{font-size:12px;color:var(--sub);line-height:1.7;margin:0 0 14px}
+  .install{position:fixed;left:16px;right:16px;bottom:calc(16px + env(safe-area-inset-bottom));
+    background:var(--green);color:var(--text);border:0;border-radius:14px;padding:14px;
+    font-size:14px;font-family:inherit;z-index:40;display:none}
+  .toast{position:fixed;left:50%;transform:translateX(-50%);
+    bottom:calc(90px + env(safe-area-inset-bottom));background:var(--slate);color:var(--text);
+    padding:11px 18px;border-radius:99px;font-size:13px;z-index:70;opacity:0;
+    transition:opacity .25s;pointer-events:none;max-width:88%;text-align:center}
+  .toast.show{opacity:1}
+</style>
+</head>
+<body>
+<header class="wrap">
+  <span class="badge">ROUTE</span><h1>둘이서, 지방도</h1>
+  <p class="tagline">우리 부부의 드라이브 기록장</p>
+</header>
+
+<div class="wrap">
+  <div class="tabs">
+    <button id="t-log" class="on" onclick="setTab('log')">기록</button>
+    <button id="t-drive" onclick="setTab('drive')">주행</button>
+    <button id="t-dis" onclick="setTab('discover')">탐색</button>
+    <button id="t-set" onclick="setTab('settings')">설정</button>
+  </div>
+</div>
+
+<main class="wrap" id="view" style="padding-bottom:110px"></main>
+
+<button class="fab" id="fab" onclick="openNew()">+</button>
+<button class="install" id="installBtn">홈 화면에 앱으로 추가하기</button>
+<div id="modal"></div>
+<div class="toast" id="toast"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+/* ═══════════ 상수 ═══════════ */
+const TAG_COLORS={해안:"#2F7E8C",야경:"#5B5FA6",벚꽃:"#D97CA0",숲길:"#3E6B4F",
+  여름:"#4C9A6B",노을:"#E08E3E",강변:"#4C86B8",눈꽃:"#8FB8D9",산길:"#4B6B4A",단풍:"#C1652F"};
+const TAG_OPTIONS=["해안","산길","단풍","벚꽃","눈꽃","노을","강변","숲길"];
+const FILTERS=["전체","해안","산길","단풍","벚꽃","눈꽃","노을","강변"];
+const GRADES=["국도","지방도","고속도로","시군도","기타"];
+const LANES=["편도 1차선","편도 2차선","왕복 4차선 이상","자동차전용도로","비포장·좁은길"];
+
+const COURSES=[
+ {id:"c1",title:"달맞이길",region:"부산",road:"해안도로 · 약 8km",tags:["해안","야경","벚꽃"],
+  q:"부산 달맞이길",desc:"해운대에서 송정까지 이어지는 해안길. 굽이진 커브를 따라 벚나무와 소나무 숲이 이어지고, 밤에는 달빛과 바다가 함께 보인다."},
+ {id:"c2",title:"메타세쿼이아길",region:"전남 담양",road:"24번 국도 · 약 8.5km",tags:["숲길","여름"],
+  q:"담양 메타세쿼이아길",desc:"담양에서 순창으로 이어지는 구간. 10~20m 높이 나무가 만드는 초록 터널을 그대로 통과한다."},
+ {id:"c3",title:"백수해안도로",region:"전남 영광",road:"해안도로 · 약 16.8km",tags:["해안","노을"],
+  q:"영광 백수해안도로",desc:"백암리에서 길용리까지, 해안선보다 높은 산언덕을 타고 도는 길. 기암괴석과 서해가 내려다보이고 노을이 특히 좋다."},
+ {id:"c4",title:"북한강변길",region:"경기 가평",road:"37번 국도",tags:["강변","단풍"],
+  q:"가평 북한강로",desc:"양평에서 가평까지 북한강을 옆에 끼고 달리는 구간. 봄엔 연초록, 가을엔 단풍이 강물에 비친다."},
+ {id:"c5",title:"임진강변길",region:"경기 파주",road:"강변도로 · 약 40km",tags:["강변","노을"],
+  q:"파주 임진강변",desc:"한강에서 임진강까지 이어지는 긴 구간. 중간에 들를 곳이 많아 쉬엄쉬엄 달리기 좋다."},
+ {id:"c6",title:"만항재",region:"강원 정선",road:"함백산 고갯길",tags:["산길","눈꽃"],
+  q:"정선 만항재",desc:"함백산 자락을 넘는 고갯길. 겨울철 눈이 내려앉은 풍경으로 유명하다."},
+ {id:"c7",title:"천수만 해안길",region:"충남 홍성",road:"해안도로",tags:["해안","노을"],
+  q:"홍성 천수만",desc:"갯벌과 방조제를 따라 달리는 서해 코스. 철새 도래지로도 알려진 구간이다."},
+ {id:"c8",title:"경포~속초 해안길",region:"강원 강릉~속초",road:"해안도로",tags:["해안","여름"],
+  q:"강릉 경포해변",desc:"동해를 옆에 두고 달리는 구간. 해변마다 잠시 멈춰 쉬어가기 좋다."}
+];
+
+/* ═══════════ 상태 ═══════════ */
+let tab="log", logs=[], wish=[], filter="전체", form=null;
+let map=null, trackLine=null, marker=null;
+let tracking=false, watchId=null, track=[], trackDist=0, startTime=0, timerId=null;
+let viewingTrack=null;
+
+const load=(k,d)=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}};
+const save=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){toast("저장 공간이 부족합니다")}};
+logs=load("drive-logs",[]); wish=load("drive-wish",[]);
+const getKey=()=>localStorage.getItem("tour-api-key")||"";
+
+/* ═══════════ 유틸 ═══════════ */
+const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const today=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`};
+const fmt=d=>{const x=new Date(d);return isNaN(x)?d:
+  `${x.getFullYear()}.${String(x.getMonth()+1).padStart(2,"0")}.${String(x.getDate()).padStart(2,"0")}`};
+const waves=n=>Array.from({length:5},(_,i)=>
+  `<span style="color:${i<n?'var(--amber)':'#4A4D53'}">〜</span>`).join("");
+const tagHtml=t=>`<span class="tag" style="background:${TAG_COLORS[t]||'#3A3D43'}">${esc(t)}</span>`;
+
+function haversine(a,b){
+  const R=6371, r=Math.PI/180;
+  const dLat=(b[0]-a[0])*r, dLon=(b[1]-a[1])*r;
+  const h=Math.sin(dLat/2)**2+Math.cos(a[0]*r)*Math.cos(b[0]*r)*Math.sin(dLon/2)**2;
+  return 2*R*Math.asin(Math.sqrt(h));
+}
+function toast(msg){
+  const t=document.getElementById("toast");
+  t.textContent=msg; t.classList.add("show");
+  clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove("show"),2600);
+}
+function roadLabel(l){
+  if(!l.grade) return "";
+  return l.roadNo ? `${l.roadNo}번 ${l.grade}` : l.grade;
+}
+
+/* ═══════════ 탭 ═══════════ */
+function setTab(t){
+  tab=t;
+  ["log","drive","dis","set"].forEach(k=>document.getElementById("t-"+k).className="");
+  document.getElementById({log:"t-log",drive:"t-drive",discover:"t-dis",settings:"t-set"}[t]).className="on";
+  document.getElementById("fab").style.display=(t==="log")?"block":"none";
+  if(t!=="drive"){ if(map){map.remove();map=null;trackLine=null;marker=null;} }
+  render();
+}
+
+/* ═══════════ 지도앱 열기 ═══════════ */
+function openMap(query){
+  const q=encodeURIComponent(query);
+  const isIOS=/iPhone|iPad|iPod/.test(navigator.userAgent);
+  const web=`https://map.naver.com/p/search/${q}`;
+  const scheme=isIOS?`nmap://search?query=${q}&appname=drivelog`
+    :`intent://search?query=${q}#Intent;scheme=nmap;package=com.nhn.android.nmap;end`;
+  const t0=Date.now();
+  location.href=scheme;
+  setTimeout(()=>{ if(Date.now()-t0<2000) window.open(web,"_blank"); },1200);
+}
+
+/* ═══════════ 렌더 ═══════════ */
+function render(){
+  const v=document.getElementById("view");
+  if(tab==="log") v.innerHTML=renderLog();
+  else if(tab==="drive"){ v.innerHTML=renderDrive(); initMap(); }
+  else if(tab==="discover") v.innerHTML=renderDiscover();
+  else v.innerHTML=renderSettings();
+}
+
+/* ── 기록 탭 ── */
+function renderLog(){
+  const dist=logs.reduce((s,l)=>s+(Number(l.distance)||0),0);
+  let h=`<div class="stats"><span>드라이브 <b>${logs.length}</b>번</span>`;
+  if(dist>0)h+=`<span>총 <b>${Math.round(dist)}</b>km</span>`;
+  h+=`</div>`;
+
+  // 도로별 수집 현황
+  const roads={};
+  logs.forEach(l=>{ if(l.roadNo&&l.grade){ const k=`${l.roadNo}번 ${l.grade}`; roads[k]=(roads[k]||0)+1; }});
+  const keys=Object.keys(roads).sort((a,b)=>parseInt(a)-parseInt(b));
+  if(keys.length){
+    h+=`<div class="sectlabel">달려본 도로 ${keys.length}개</div><div class="roadchips">`;
+    keys.forEach(k=>h+=`<span class="rchip"><b>${esc(k)}</b> ${roads[k]}회</span>`);
+    h+=`</div>`;
+  }
+
+  if(!logs.length) return h+`<div class="empty">아직 기록된 드라이브가 없어요.<br>
+    주행 탭에서 기록을 시작하거나,<br>우측 아래 + 버튼으로 직접 적어보세요.</div>`;
+
+  h+=`<div class="tl">`;
+  logs.forEach(l=>{
+    h+=`<div class="entry"><div class="card">
+      <div class="row"><div>
+        <div class="name">${esc(l.roadName)}</div>
+        <div class="meta">${l.region?esc(l.region)+" · ":""}${fmt(l.date)}${l.distance?" · "+esc(l.distance)+"km":""}</div>
+      </div><button class="icobtn" onclick="del('${l.id}')">✕</button></div>
+      <div class="tags">
+        ${l.grade?`<span class="gradetag">${esc(roadLabel(l))}</span>`:""}
+        ${l.lane?`<span class="lanetag">${esc(l.lane)}</span>`:""}
+        ${(l.tags||[]).map(tagHtml).join("")}
+      </div>
+      <div class="waves">${waves(l.rating)}</div>
+      ${l.memo?`<p class="memo">${esc(l.memo)}</p>`:""}
+      <div class="btnrow">
+        ${l.track&&l.track.length>1?`<button class="navbtn" onclick="showTrack('${l.id}')">경로 보기</button>`:""}
+        <button class="navbtn ghost" onclick="openMap('${esc((l.region||"")+" "+l.roadName)}')">지도앱</button>
+      </div>
+    </div></div>`;
+  });
+  return h+`</div>`;
+}
+
+function showTrack(id){
+  const l=logs.find(x=>x.id===id);
+  if(!l||!l.track) return;
+  viewingTrack=l;
+  setTab("drive");
+}
+
+/* ── 주행 탭 ── */
+function renderDrive(){
+  const km=trackDist.toFixed(1);
+  const mins=startTime?Math.floor((Date.now()-startTime)/60000):0;
+  let h=`<div id="map"></div>`;
+  if(viewingTrack){
+    h+=`<div class="drivepanel">
+      <div class="name">${esc(viewingTrack.roadName)}</div>
+      <div class="meta" style="margin-bottom:12px">${fmt(viewingTrack.date)}${viewingTrack.distance?" · "+esc(viewingTrack.distance)+"km":""}</div>
+      <button class="bigbtn start" onclick="viewingTrack=null;render()">주행 화면으로 돌아가기</button>
+    </div>`;
+    return h;
+  }
+  h+=`<div class="drivepanel">
+    <div class="live">
+      <div><span>거리</span><b>${km}<small style="font-size:14px"> km</small></b></div>
+      <div><span>시간</span><b>${mins}<small style="font-size:14px"> 분</small></b></div>
+      <div><span>기록점</span><b>${track.length}</b></div>
+    </div>
+    ${tracking
+      ? `<button class="bigbtn stop" onclick="stopTracking()">기록 정지하고 저장</button>`
+      : `<button class="bigbtn start" onclick="startTracking()">드라이브 기록 시작</button>`}
+    <div class="statusline" id="gpsStatus">${tracking?"GPS 수신 중 — 화면을 꺼도 계속 기록됩니다":"출발할 때 눌러주세요"}</div>
+  </div>
+  <div class="poi" id="poiBox">
+    <div class="sectlabel" style="margin-bottom:10px">주변 명소 · 축제</div>
+    <button class="navbtn" style="margin-top:0" onclick="loadPoi()">지금 위치 주변 찾기</button>
+    <div id="poiList"></div>
+  </div>`;
+  return h;
+}
+
+function initMap(){
+  const el=document.getElementById("map");
+  if(!el||typeof L==="undefined"){ if(el) el.innerHTML='<div class="empty">지도를 불러오지 못했습니다. 인터넷 연결을 확인해주세요.</div>'; return; }
+  map=L.map(el,{zoomControl:true}).setView([36.5,127.8],7);
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{
+    maxZoom:19, attribution:'&copy; OpenStreetMap'
+  }).addTo(map);
+  setTimeout(()=>map&&map.invalidateSize(),200);
+
+  if(viewingTrack&&viewingTrack.track.length>1){
+    const line=L.polyline(viewingTrack.track,{color:"#F0B429",weight:5}).addTo(map);
+    map.fitBounds(line.getBounds(),{padding:[30,30]});
+    return;
+  }
+  if(track.length>1){
+    trackLine=L.polyline(track,{color:"#F0B429",weight:5}).addTo(map);
+    map.fitBounds(trackLine.getBounds(),{padding:[30,30]});
+  } else {
+    navigator.geolocation&&navigator.geolocation.getCurrentPosition(p=>{
+      if(map) map.setView([p.coords.latitude,p.coords.longitude],13);
+    },()=>{},{timeout:8000});
+  }
+}
+
+/* ── GPS 기록 ── */
+function startTracking(){
+  if(!navigator.geolocation){ toast("이 기기에서 GPS를 쓸 수 없습니다"); return; }
+  track=[]; trackDist=0; startTime=Date.now(); tracking=true;
+  viewingTrack=null;
+  watchId=navigator.geolocation.watchPosition(onPos,onPosErr,
+    {enableHighAccuracy:true,maximumAge:3000,timeout:20000});
+  timerId=setInterval(()=>{ if(tab==="drive"&&tracking) updateLive(); },10000);
+  render();
+  toast("기록을 시작했습니다");
+}
+function onPos(p){
+  const c=p.coords;
+  if(c.accuracy>60) return;                       // 오차 큰 점 버림
+  const pt=[c.latitude,c.longitude];
+  if(track.length){
+    const d=haversine(track[track.length-1],pt);
+    if(d<0.008) return;                            // 8m 미만 이동 무시
+    if(d>2) return;                                // 순간이동 튐 무시
+    trackDist+=d;
+  }
+  track.push(pt);
+  if(map){
+    if(!trackLine) trackLine=L.polyline(track,{color:"#F0B429",weight:5}).addTo(map);
+    else trackLine.setLatLngs(track);
+    if(!marker) marker=L.circleMarker(pt,{radius:7,color:"#fff",weight:2,fillColor:"#C1652F",fillOpacity:1}).addTo(map);
+    else marker.setLatLng(pt);
+    map.setView(pt,Math.max(map.getZoom(),14));
+  }
+  updateLive();
+}
+function onPosErr(e){
+  const s=document.getElementById("gpsStatus");
+  if(s) s.textContent = e.code===1
+    ? "위치 권한이 거부되었습니다. 브라우저 설정에서 허용해주세요."
+    : "GPS 신호를 찾는 중입니다...";
+}
+function updateLive(){
+  const p=document.querySelector(".live");
+  if(!p) return;
+  const mins=startTime?Math.floor((Date.now()-startTime)/60000):0;
+  p.innerHTML=`<div><span>거리</span><b>${trackDist.toFixed(1)}<small style="font-size:14px"> km</small></b></div>
+    <div><span>시간</span><b>${mins}<small style="font-size:14px"> 분</small></b></div>
+    <div><span>기록점</span><b>${track.length}</b></div>`;
+}
+function stopTracking(){
+  if(watchId!=null) navigator.geolocation.clearWatch(watchId);
+  clearInterval(timerId); tracking=false; watchId=null;
+  if(track.length<2){ toast("기록된 경로가 너무 짧습니다"); render(); return; }
+  openNew({date:today(),roadName:"",region:"",grade:"지방도",roadNo:"",lane:"",
+    distance:trackDist.toFixed(1),tags:[],rating:3,memo:"",track:[...track]});
+}
+
+/* ── TourAPI 주변 명소 ── */
+async function loadPoi(){
+  const key=getKey();
+  const box=document.getElementById("poiList");
+  if(!key){ box.innerHTML=`<div class="note" style="margin:12px 0 0">설정 탭에서 공공데이터포털 인증키를 먼저 넣어주세요.</div>`; return; }
+  if(!navigator.geolocation){ box.innerHTML=`<div class="note" style="margin:12px 0 0">위치를 가져올 수 없습니다.</div>`; return; }
+  box.innerHTML=`<div class="note" style="margin:12px 0 0">위치 확인 중...</div>`;
+  navigator.geolocation.getCurrentPosition(async p=>{
+    const {latitude:lat,longitude:lng}=p.coords;
+    box.innerHTML=`<div class="note" style="margin:12px 0 0">주변 관광정보를 불러오는 중...</div>`;
+    const url=`https://apis.data.go.kr/B551011/KorService2/locationBasedList2`
+      +`?serviceKey=${encodeURIComponent(key)}&numOfRows=12&pageNo=1&MobileOS=ETC`
+      +`&MobileApp=drivelog&_type=json&mapX=${lng}&mapY=${lat}&radius=15000&arrange=E`;
+    try{
+      const r=await fetch(url);
+      const j=await r.json();
+      const items=(((j.response||{}).body||{}).items||{}).item||[];
+      if(!items.length){ box.innerHTML=`<div class="note" style="margin:12px 0 0">반경 15km 안에 등록된 관광정보가 없습니다.</div>`; return; }
+      box.innerHTML=items.map(it=>`<div class="poiitem">
+        <b>${esc(it.title)}</b>
+        <div>${esc(it.addr1||"")}${it.dist?` · ${(Number(it.dist)/1000).toFixed(1)}km`:""}</div>
+        <button class="navbtn" onclick="openMap('${esc(it.title)}')">지도앱으로 보기</button>
+      </div>`).join("");
+    }catch(e){
+      box.innerHTML=`<div class="note" style="margin:12px 0 0">
+        관광정보를 불러오지 못했습니다.<br>
+        인증키가 아직 활성화되지 않았거나(최대 1시간), 브라우저 보안정책(CORS)에 막혔을 수 있습니다.
+        설정 탭의 안내를 확인해주세요.</div>`;
+    }
+  },()=>{ box.innerHTML=`<div class="note" style="margin:12px 0 0">위치 권한을 허용해주세요.</div>`; },
+  {enableHighAccuracy:true,timeout:10000});
+}
+
+/* ── 탐색 탭 ── */
+function renderDiscover(){
+  let h="";
+  if(wish.length){
+    h+=`<div class="sectlabel">찜한 코스 ${wish.length}</div><div class="chips">`;
+    wish.forEach(w=>h+=`<div class="chip">${esc(w.title)}<button onclick="unwish('${w.id}')">✕</button></div>`);
+    h+=`</div>`;
+  }
+  h+=`<div class="filters">`;
+  FILTERS.forEach(f=>h+=`<button class="${f===filter?"on":""}" onclick="setFilter('${f}')">${f}</button>`);
+  h+=`</div><div class="grid">`;
+  COURSES.filter(c=>filter==="전체"||c.tags.includes(filter)).forEach(c=>{
+    const on=wish.some(w=>w.id===c.id);
+    h+=`<div class="card">
+      <div class="region">📍 ${esc(c.region)}</div>
+      <div class="name">${esc(c.title)}</div>
+      <div class="roadinfo">${esc(c.road)}</div>
+      <div class="tags">${c.tags.map(tagHtml).join("")}</div>
+      <p class="desc">${esc(c.desc)}</p>
+      <div class="acts">
+        <button class="${on?"on":""}" onclick="togWish('${c.id}')">${on?"♥ 찜 취소":"♡ 찜하기"}</button>
+        <button class="went" onclick="fromCourse('${c.id}')">✓ 다녀왔어요</button>
+      </div>
+      <button class="navbtn" onclick="openMap('${esc(c.q)}')">지도앱으로 길찾기</button>
+    </div>`;
+  });
+  return h+`</div>`;
+}
+function setFilter(f){filter=f;render()}
+function unwish(id){wish=wish.filter(w=>w.id!==id);save("drive-wish",wish);render()}
+function togWish(id){const c=COURSES.find(x=>x.id===id);
+  wish=wish.some(w=>w.id===id)?wish.filter(w=>w.id!==id):[...wish,{id,title:c.title,region:c.region}];
+  save("drive-wish",wish);render()}
+function fromCourse(id){const c=COURSES.find(x=>x.id===id);
+  openNew({date:today(),roadName:c.title,region:c.region,grade:"",roadNo:"",lane:"",
+    distance:"",tags:[...c.tags],rating:3,memo:"",track:null})}
+
+/* ── 설정 탭 ── */
+function renderSettings(){
+  const key=getKey();
+  return `<div class="card" style="margin-bottom:14px">
+    <div class="sectlabel">공공데이터포털 인증키</div>
+    <p class="note">한국관광공사 TourAPI 키를 넣으면 주행 탭에서 주변 명소·축제를 찾을 수 있습니다.
+      키는 이 폰에만 저장되고 어디로도 전송되지 않습니다.</p>
+    <input type="text" id="apikey" value="${esc(key)}" placeholder="디코딩 키를 붙여넣으세요">
+    <div class="btns">
+      <button class="cancel" onclick="clearKey()">지우기</button>
+      <button class="save" onclick="saveKey()">저장</button>
+    </div>
+  </div>
+  <div class="card" style="margin-bottom:14px">
+    <div class="sectlabel">기록 백업 · 옮기기</div>
+    <p class="note">기록은 이 폰에만 저장됩니다. 내보내기 한 파일을 다른 폰에서 가져오면
+      두 분이 같은 기록을 볼 수 있습니다.</p>
+    <div class="btns">
+      <button class="cancel" onclick="exportData()">내보내기</button>
+      <button class="save" onclick="document.getElementById('importFile').click()">가져오기</button>
+    </div>
+    <input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(this)">
+  </div>
+  <div class="card">
+    <div class="sectlabel">참고</div>
+    <p class="note" style="margin:0">
+      · 지도는 OpenStreetMap을 씁니다. 키가 필요 없습니다.<br>
+      · 주행 기록 중에는 화면을 켜두는 편이 정확합니다. 폰이 절전에 들어가면 GPS 간격이 벌어질 수 있습니다.<br>
+      · 관광정보 호출이 계속 실패하면 브라우저 보안정책(CORS) 문제일 수 있습니다. 이 경우 중계 서버가 필요합니다.
+    </p>
+  </div>`;
+}
+function saveKey(){
+  const v=document.getElementById("apikey").value.trim();
+  localStorage.setItem("tour-api-key",v);
+  toast(v?"인증키를 저장했습니다":"인증키를 비웠습니다");
+}
+function clearKey(){ localStorage.removeItem("tour-api-key"); render(); toast("인증키를 지웠습니다"); }
+function exportData(){
+  const blob=new Blob([JSON.stringify({logs,wish},null,2)],{type:"application/json"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download=`지방도기록_${today()}.json`;
+  a.click(); URL.revokeObjectURL(a.href);
+}
+function importData(inp){
+  const f=inp.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>{
+    try{
+      const d=JSON.parse(r.result);
+      if(!Array.isArray(d.logs)) throw 0;
+      const ids=new Set(logs.map(l=>l.id));
+      const merged=[...logs,...d.logs.filter(l=>!ids.has(l.id))]
+        .sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+      logs=merged; save("drive-logs",logs);
+      if(Array.isArray(d.wish)){
+        const wids=new Set(wish.map(w=>w.id));
+        wish=[...wish,...d.wish.filter(w=>!wids.has(w.id))]; save("drive-wish",wish);
+      }
+      toast(`${d.logs.length}건을 합쳤습니다`);
+      setTab("log");
+    }catch(e){ toast("파일을 읽을 수 없습니다"); }
+  };
+  r.readAsText(f); inp.value="";
+}
+
+/* ═══════════ 기록 입력 ═══════════ */
+function openNew(pre){
+  form=pre||{date:today(),roadName:"",region:"",grade:"",roadNo:"",lane:"",
+    distance:"",tags:[],rating:3,memo:"",track:null};
+  drawModal();
+}
+function closeModal(){form=null;document.getElementById("modal").innerHTML="";render()}
+function drawModal(){
+  const f=form;
+  document.getElementById("modal").innerHTML=`
+  <div class="backdrop" onclick="if(event.target===this)closeModal()"><div class="sheet">
+    <div class="row" style="margin-bottom:16px">
+      <div class="disp" style="font-size:20px">${f.track?"주행 기록 저장":"새 드라이브 기록"}</div>
+      <button class="icobtn" onclick="closeModal()">✕</button></div>
+    ${f.track?`<p class="note">GPS로 ${f.track.length}개 지점, 약 ${f.distance}km를 기록했습니다.</p>`:""}
+    <label>다녀온 날짜</label>
+    <input type="date" id="f-date" value="${esc(f.date)}">
+    <label>도로명 또는 코스명</label>
+    <input type="text" id="f-name" value="${esc(f.roadName)}" placeholder="예: 백수해안도로" oninput="checkSave()">
+    <div class="two">
+      <div><label>도로 등급</label>
+        <select id="f-grade">
+          <option value="">선택 안 함</option>
+          ${GRADES.map(g=>`<option ${f.grade===g?"selected":""}>${g}</option>`).join("")}
+        </select></div>
+      <div><label>도로 번호</label>
+        <input type="number" id="f-roadno" value="${esc(f.roadNo)}" placeholder="예: 24"></div>
+    </div>
+    <label>차선</label>
+    <select id="f-lane">
+      <option value="">선택 안 함</option>
+      ${LANES.map(l=>`<option ${f.lane===l?"selected":""}>${l}</option>`).join("")}
+    </select>
+    <div class="two">
+      <div><label>지역</label>
+        <input type="text" id="f-region" value="${esc(f.region)}" placeholder="예: 영광"></div>
+      <div><label>거리(km)</label>
+        <input type="number" step="0.1" id="f-dist" value="${esc(f.distance)}" placeholder="선택"></div>
+    </div>
+    <label>테마</label>
+    <div class="pick">${TAG_OPTIONS.map(t=>`<button onclick="togTag('${t}')" style="${
+      f.tags.includes(t)?`background:${TAG_COLORS[t]};color:#fff;border-color:transparent`:""}">${t}</button>`).join("")}</div>
+    <label>구불구불 지수</label>
+    <div class="rate">${[1,2,3,4,5].map(n=>
+      `<button class="${n<=f.rating?"on":""}" onclick="setRate(${n})">〜</button>`).join("")}</div>
+    <label>메모</label>
+    <textarea id="f-memo" rows="3" placeholder="그날의 기억을 남겨보세요">${esc(f.memo)}</textarea>
+    <div class="btns">
+      <button class="cancel" onclick="closeModal()">취소</button>
+      <button class="save" id="saveBtn" onclick="addLog()" ${f.roadName.trim()?"":"disabled"}>저장</button>
+    </div>
+  </div></div>`;
+}
+function sync(){
+  const g=i=>document.getElementById(i);
+  if(!g("f-date")) return;
+  form.date=g("f-date").value; form.roadName=g("f-name").value;
+  form.grade=g("f-grade").value; form.roadNo=g("f-roadno").value;
+  form.lane=g("f-lane").value; form.region=g("f-region").value;
+  form.distance=g("f-dist").value; form.memo=g("f-memo").value;
+}
+function checkSave(){document.getElementById("saveBtn").disabled=!document.getElementById("f-name").value.trim()}
+function togTag(t){sync();form.tags=form.tags.includes(t)?form.tags.filter(x=>x!==t):[...form.tags,t];drawModal()}
+function setRate(n){sync();form.rating=n;drawModal()}
+function addLog(){
+  sync();
+  if(!form.roadName.trim())return;
+  logs=[{...form,id:String(Date.now())},...logs];
+  save("drive-logs",logs);
+  form=null; document.getElementById("modal").innerHTML="";
+  track=[];trackDist=0;startTime=0;trackLine=null;marker=null;
+  setTab("log");
+  toast("기록을 저장했습니다");
+}
+function del(id){
+  if(!confirm("이 기록을 지울까요?"))return;
+  logs=logs.filter(l=>l.id!==id);save("drive-logs",logs);render();
+}
+
+/* ═══════════ 설치 · 부팅 ═══════════ */
+let deferred=null;
+const ib=document.getElementById("installBtn");
+window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();deferred=e;ib.style.display="block"});
+ib.onclick=async()=>{if(!deferred)return;deferred.prompt();await deferred.userChoice;deferred=null;ib.style.display="none"};
+window.addEventListener("beforeunload",e=>{ if(tracking){e.preventDefault();e.returnValue=""} });
+if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(()=>{});
+render();
+</script>
+</body>
+</html>
