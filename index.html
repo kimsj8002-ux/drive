@@ -209,7 +209,7 @@ const COURSES=[
 /* ═══════════ 상태 ═══════════ */
 let tab="log", logs=[], wish=[], filter="전체", form=null;
 let map=null, trackLine=null, marker=null;
-let roadLayer=null, roadMode="", roadLoading=false;
+let roadLayer=null, roadMode="", roadLoading=false, poiLayer=null;
 let query="", gradeFilter="전체", laneFilter="전체", logLaneFilter="전체";
 let tracking=false, watchId=null, track=[], trackDist=0, startTime=0, timerId=null;
 let viewingTrack=null;
@@ -409,8 +409,8 @@ function renderDrive(){
     <div class="statusline" id="gpsStatus">${tracking?"GPS 수신 중 — 화면을 꺼도 계속 기록됩니다":"출발할 때 눌러주세요"}</div>
   </div>
   <div class="poi" id="poiBox">
-    <div class="sectlabel" style="margin-bottom:10px">주변 명소 · 축제</div>
-    <button class="navbtn" style="margin-top:0" onclick="loadPoi()">지금 위치 주변 찾기</button>
+    <div class="sectlabel" style="margin-bottom:10px">명소 · 축제 (지도를 옮긴 뒤 눌러보세요)</div>
+    <button class="navbtn" style="margin-top:0" onclick="loadPoi()">지도에 보이는 범위에서 찾기</button>
     <div id="poiList"></div>
   </div>`;
   return h;
@@ -593,32 +593,50 @@ async function loadPoi(){
   const key=getKey();
   const box=document.getElementById("poiList");
   if(!key){ box.innerHTML=`<div class="note" style="margin:12px 0 0">설정 탭에서 공공데이터포털 인증키를 먼저 넣어주세요.</div>`; return; }
-  if(!navigator.geolocation){ box.innerHTML=`<div class="note" style="margin:12px 0 0">위치를 가져올 수 없습니다.</div>`; return; }
-  box.innerHTML=`<div class="note" style="margin:12px 0 0">위치 확인 중...</div>`;
-  navigator.geolocation.getCurrentPosition(async p=>{
-    const {latitude:lat,longitude:lng}=p.coords;
-    box.innerHTML=`<div class="note" style="margin:12px 0 0">주변 관광정보를 불러오는 중...</div>`;
-    const url=`https://apis.data.go.kr/B551011/KorService2/locationBasedList2`
-      +`?serviceKey=${encodeURIComponent(key)}&numOfRows=12&pageNo=1&MobileOS=ETC`
-      +`&MobileApp=drivelog&_type=json&mapX=${lng}&mapY=${lat}&radius=15000&arrange=E`;
-    try{
-      const r=await fetch(url);
-      const j=await r.json();
-      const items=(((j.response||{}).body||{}).items||{}).item||[];
-      if(!items.length){ box.innerHTML=`<div class="note" style="margin:12px 0 0">반경 15km 안에 등록된 관광정보가 없습니다.</div>`; return; }
-      box.innerHTML=items.map(it=>`<div class="poiitem">
+  if(!map){ box.innerHTML=`<div class="note" style="margin:12px 0 0">지도가 준비되지 않았습니다.</div>`; return; }
+
+  // 지도에 보이는 범위 → 중심 + 반경
+  const b=map.getBounds(), c=b.getCenter();
+  let radius=Math.round(haversine([c.lat,c.lng],[b.getNorth(),c.lng])*1000);
+  let capped=false;
+  if(radius>20000){ radius=20000; capped=true; }   // TourAPI 최대 반경
+  if(radius<1000) radius=1000;
+
+  box.innerHTML=`<div class="note" style="margin:12px 0 0">지도 중심에서 반경 ${(radius/1000).toFixed(0)}km 안을 찾는 중...</div>`;
+  const url=`https://apis.data.go.kr/B551011/KorService2/locationBasedList2`
+    +`?serviceKey=${encodeURIComponent(key)}&numOfRows=30&pageNo=1&MobileOS=ETC`
+    +`&MobileApp=drivelog&_type=json&mapX=${c.lng}&mapY=${c.lat}&radius=${radius}&arrange=E`;
+  try{
+    const r=await fetch(url);
+    const j=await r.json();
+    const items=(((j.response||{}).body||{}).items||{}).item||[];
+    if(!items.length){
+      box.innerHTML=`<div class="note" style="margin:12px 0 0">이 범위에 등록된 관광정보가 없습니다.</div>`;
+      if(poiLayer&&map){ map.removeLayer(poiLayer); poiLayer=null; }
+      return;
+    }
+    // 지도에 표시
+    if(poiLayer&&map) map.removeLayer(poiLayer);
+    poiLayer=L.layerGroup().addTo(map);
+    items.forEach(it=>{
+      if(!it.mapy||!it.mapx) return;
+      L.circleMarker([Number(it.mapy),Number(it.mapx)],
+        {radius:6,color:"#fff",weight:2,fillColor:"#5B5FA6",fillOpacity:1})
+        .bindTooltip(it.title,{direction:"top"}).addTo(poiLayer);
+    });
+    box.innerHTML=
+      (capped?`<div class="note" style="margin:12px 0 4px">반경 20km까지만 조회됩니다(관광공사 제한). 더 좁게 보시면 정확해집니다.</div>`:"")
+      +`<div class="note" style="margin:12px 0 4px">${items.length}곳 · 반경 ${(radius/1000).toFixed(0)}km</div>`
+      +items.map(it=>`<div class="poiitem">
         <b>${esc(it.title)}</b>
         <div>${esc(it.addr1||"")}${it.dist?` · ${(Number(it.dist)/1000).toFixed(1)}km`:""}</div>
         <button class="navbtn" onclick="openMap('${esc(it.title)}')">지도앱으로 보기</button>
       </div>`).join("");
-    }catch(e){
-      box.innerHTML=`<div class="note" style="margin:12px 0 0">
-        관광정보를 불러오지 못했습니다.<br>
-        인증키가 아직 활성화되지 않았거나(최대 1시간), 브라우저 보안정책(CORS)에 막혔을 수 있습니다.
-        설정 탭의 안내를 확인해주세요.</div>`;
-    }
-  },()=>{ box.innerHTML=`<div class="note" style="margin:12px 0 0">위치 권한을 허용해주세요.</div>`; },
-  {enableHighAccuracy:true,timeout:10000});
+  }catch(e){
+    box.innerHTML=`<div class="note" style="margin:12px 0 0">
+      관광정보를 불러오지 못했습니다.<br>
+      인증키가 아직 활성화되지 않았거나(최대 1시간), 브라우저 보안정책(CORS)에 막혔을 수 있습니다.</div>`;
+  }
 }
 
 /* ── 탐색 탭 ── */
