@@ -114,7 +114,7 @@
     align-items:flex-end;justify-content:center;z-index:60}
   @media(min-width:600px){.backdrop{align-items:center}}
   .sheet{width:100%;max-width:470px;background:var(--card);border-radius:20px 20px 0 0;
-    padding:20px 20px calc(20px + env(safe-area-inset-bottom));max-height:90vh;overflow-y:auto}
+    padding:20px 20px calc(40px + env(safe-area-inset-bottom));max-height:90vh;overflow-y:auto}
   @media(min-width:600px){.sheet{border-radius:20px}}
   label{display:block;font-size:12px;color:var(--sub);margin:0 0 5px}
   input,textarea,select{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--line);
@@ -142,6 +142,17 @@
     padding:11px 18px;border-radius:99px;font-size:13px;z-index:70;opacity:0;
     transition:opacity .25s;pointer-events:none;max-width:88%;text-align:center}
   .toast.show{opacity:1}
+  .layerbar{display:flex;gap:7px;margin-bottom:14px;overflow-x:auto;scrollbar-width:none}
+  .layerbar::-webkit-scrollbar{display:none}
+  .layerbar button{flex:0 0 auto;border:1px solid var(--line);background:var(--card);
+    color:var(--sub);border-radius:99px;padding:7px 14px;font-size:12px;font-family:inherit;
+    white-space:nowrap}
+  .layerbar button.on{border-color:transparent;color:#fff}
+  .searchbox{position:relative;margin-bottom:12px}
+  .searchbox input{margin-bottom:0;padding-left:34px}
+  .searchbox:before{content:"⌕";position:absolute;left:12px;top:9px;color:var(--sub);font-size:16px}
+  .legend{font-size:11px;color:var(--sub);margin:-6px 0 14px;line-height:1.7}
+  .legend i{display:inline-block;width:16px;height:3px;vertical-align:middle;margin-right:5px;border-radius:2px}
 </style>
 </head>
 <body>
@@ -198,6 +209,8 @@ const COURSES=[
 /* ═══════════ 상태 ═══════════ */
 let tab="log", logs=[], wish=[], filter="전체", form=null;
 let map=null, trackLine=null, marker=null;
+let roadLayer=null, roadMode="", roadLoading=false;
+let query="", gradeFilter="전체", laneFilter="전체", logLaneFilter="전체";
 let tracking=false, watchId=null, track=[], trackDist=0, startTime=0, timerId=null;
 let viewingTrack=null;
 
@@ -282,8 +295,38 @@ function renderLog(){
   if(!logs.length) return h+`<div class="empty">아직 기록된 드라이브가 없어요.<br>
     주행 탭에서 기록을 시작하거나,<br>우측 아래 + 버튼으로 직접 적어보세요.</div>`;
 
+  // 검색 + 등급 필터
+  h+=`<div class="searchbox">
+    <input type="text" id="q" value="${esc(query)}" placeholder="도로명 · 지역 · 메모로 찾기"
+      oninput="onQuery(this.value)"></div>
+    <div class="filters">`;
+  ["전체",...GRADES].forEach(g=>{
+    h+=`<button class="${gradeFilter===g?"on":""}" onclick="setGradeFilter('${g}')">${g}</button>`;
+  });
+  h+=`</div><div class="filters">`;
+  ["전체",...LANES].forEach(l=>{
+    h+=`<button class="${logLaneFilter===l?"on":""}" style="${logLaneFilter===l?"background:var(--green);color:#fff":""}"
+      onclick="setLogLane('${l}')">${l}</button>`;
+  });
+  h+=`</div>`;
+
+  const q=query.trim().toLowerCase();
+  const shown=logs.filter(l=>{
+    if(gradeFilter!=="전체"&&l.grade!==gradeFilter) return false;
+    if(logLaneFilter!=="전체"&&l.lane!==logLaneFilter) return false;
+    if(!q) return true;
+    return [l.roadName,l.region,l.memo,l.roadNo,l.lane,(l.tags||[]).join(" ")]
+      .filter(Boolean).join(" ").toLowerCase().includes(q);
+  });
+
+  if(!shown.length) return h+`<div class="empty">조건에 맞는 기록이 없습니다.</div>`;
+  if(shown.length!==logs.length){
+    const d2=shown.reduce((s,l)=>s+(Number(l.distance)||0),0);
+    h+=`<div class="sectlabel">${shown.length}건${d2>0?` · ${Math.round(d2)}km`:""}</div>`;
+  }
+
   h+=`<div class="tl">`;
-  logs.forEach(l=>{
+  shown.forEach(l=>{
     h+=`<div class="entry"><div class="card">
       <div class="row"><div>
         <div class="name">${esc(l.roadName)}</div>
@@ -305,6 +348,17 @@ function renderLog(){
   return h+`</div>`;
 }
 
+function onQuery(v){
+  query=v;
+  const el=document.getElementById("q");
+  const pos=el?el.selectionStart:0;
+  render();
+  const el2=document.getElementById("q");
+  if(el2){ el2.focus(); try{el2.setSelectionRange(pos,pos)}catch(e){} }
+}
+function setGradeFilter(g){ gradeFilter=(gradeFilter===g?"전체":g); render(); }
+function setLogLane(l){ logLaneFilter=(logLaneFilter===l?"전체":l); render(); }
+
 function showTrack(id){
   const l=logs.find(x=>x.id===id);
   if(!l||!l.track) return;
@@ -316,7 +370,25 @@ function showTrack(id){
 function renderDrive(){
   const km=trackDist.toFixed(1);
   const mins=startTime?Math.floor((Date.now()-startTime)/60000):0;
-  let h=`<div id="map"></div>`;
+  let h=`<div class="layerbar">
+      <button class="${roadMode==="secondary"?"on":""}" style="${roadMode==="secondary"?"background:#4C86B8":""}"
+        onclick="toggleRoads('secondary')">지방도 보기</button>
+      <button class="${roadMode==="trunk"?"on":""}" style="${roadMode==="trunk"?"background:#C1652F":""}"
+        onclick="toggleRoads('trunk')">국도 보기</button>
+      <button class="${roadMode==="both"?"on":""}" style="${roadMode==="both"?"background:var(--green)":""}"
+        onclick="toggleRoads('both')">둘 다</button>
+      ${roadMode?`<button onclick="toggleRoads('')">끄기</button>`:""}
+    </div>
+    ${roadMode?`<div class="layerbar">
+      ${["전체","왕복 2차선","왕복 4차선 이상","정보 없음"].map(v=>
+        `<button class="${laneFilter===v?"on":""}" style="${laneFilter===v?"background:var(--slate);color:var(--amber);border-color:var(--amber)":""}"
+          onclick="setLaneLayer('${v}')">${v}</button>`).join("")}
+    </div>`:""}
+    <div id="map"></div>
+    ${roadMode?`<div class="legend">
+      <i style="background:#4C86B8"></i>지방도 &nbsp; <i style="background:#C1652F"></i>국도 &nbsp;
+      <span style="opacity:.8">— 굵은 선은 4차선 이상. 선을 누르면 차선 정보가 뜹니다.
+      OSM에 차선이 안 적힌 시골길이 많아, 정보 없음이 곧 좁은 길인 경우가 흔합니다.</span></div>`:""}`;
   if(viewingTrack){
     h+=`<div class="drivepanel">
       <div class="name">${esc(viewingTrack.roadName)}</div>
@@ -352,6 +424,8 @@ function initMap(){
     maxZoom:19, attribution:'&copy; OpenStreetMap'
   }).addTo(map);
   setTimeout(()=>map&&map.invalidateSize(),200);
+  map.on("moveend",()=>{ if(roadMode&&!roadLoading) loadRoads(); });
+  if(roadMode) setTimeout(loadRoads,600);
 
   if(viewingTrack&&viewingTrack.track.length>1){
     const line=L.polyline(viewingTrack.track,{color:"#F0B429",weight:5}).addTo(map);
@@ -419,6 +493,77 @@ function stopTracking(){
   if(track.length<2){ toast("기록된 경로가 너무 짧습니다"); render(); return; }
   openNew({date:today(),roadName:"",region:"",grade:"지방도",roadNo:"",lane:"",
     distance:trackDist.toFixed(1),tags:[],rating:3,memo:"",track:[...track]});
+}
+
+/* ── 지방도·국도 표시 (OpenStreetMap Overpass) ── */
+function toggleRoads(mode){
+  roadMode=(roadMode===mode)?"":mode;
+  if(roadLayer&&map){ map.removeLayer(roadLayer); roadLayer=null; }
+  render();
+  if(roadMode) setTimeout(loadRoads,300);
+}
+function laneDesc(tg){
+  const parts=[];
+  if(tg.motorroad==="yes") parts.push("자동차전용");
+  const n=Number(tg.lanes);
+  if(n){
+    if(tg.oneway==="yes") parts.push(`편도 ${n}차선`);
+    else if(n===2) parts.push("왕복 2차선 (편도 1차선)");
+    else if(n===4) parts.push("왕복 4차선 (편도 2차선)");
+    else parts.push(`${n}차선`);
+  } else parts.push("차선 정보 없음");
+  if(tg.surface&&tg.surface!=="asphalt"&&tg.surface!=="paved") parts.push(tg.surface);
+  return parts.join(" · ");
+}
+function laneMatch(tg){
+  if(laneFilter==="전체") return true;
+  const n=Number(tg.lanes);
+  if(laneFilter==="왕복 2차선") return n===2;
+  if(laneFilter==="왕복 4차선 이상") return n>=4;
+  if(laneFilter==="정보 없음") return !n;
+  return true;
+}
+function setLaneLayer(v){ laneFilter=(laneFilter===v?"전체":v); render(); if(roadMode) setTimeout(loadRoads,300); }
+
+async function loadRoads(){
+  if(!map||!roadMode||roadLoading) return;
+  if(map.getZoom()<10){ toast("지도를 조금 더 확대해주세요"); return; }
+  roadLoading=true; toast("도로 정보를 불러오는 중...");
+  const b=map.getBounds();
+  const bbox=`${b.getSouth().toFixed(4)},${b.getWest().toFixed(4)},${b.getNorth().toFixed(4)},${b.getEast().toFixed(4)}`;
+  let filter="";
+  if(roadMode==="secondary") filter=`way["highway"="secondary"]["motorroad"!="yes"](${bbox});`;
+  else if(roadMode==="trunk") filter=`way["highway"~"^(trunk|primary)$"]["motorroad"!="yes"](${bbox});`;
+  else filter=`way["highway"~"^(trunk|primary|secondary)$"]["motorroad"!="yes"](${bbox});`;
+  const q=`[out:json][timeout:30];(${filter});out geom;`;
+  try{
+    const r=await fetch("https://overpass-api.de/api/interpreter",
+      {method:"POST",body:"data="+encodeURIComponent(q)});
+    const j=await r.json();
+    if(roadLayer&&map){ map.removeLayer(roadLayer); }
+    roadLayer=L.layerGroup().addTo(map);
+    let n=0;
+    (j.elements||[]).forEach(el=>{
+      if(!el.geometry) return;
+      if(!laneMatch(el.tags||{})) return;
+      const pts=el.geometry.map(g=>[g.lat,g.lon]);
+      const hw=(el.tags||{}).highway;
+      const color=(hw==="secondary")?"#4C86B8":"#C1652F";
+      const tg=el.tags||{};
+      const ref=tg.ref||"", nm=tg.name||"";
+      const head=[ref?`${ref}번`:"",nm].filter(Boolean).join(" ")
+        ||(hw==="secondary"?"지방도":"국도");
+      const laneTxt=laneDesc(tg);
+      const label=`<b>${head}</b><br>${laneTxt}`;
+      const weight=(tg.lanes&&Number(tg.lanes)>=4)?6:4;
+      L.polyline(pts,{color,weight,opacity:.85})
+        .bindTooltip(label,{sticky:true}).addTo(roadLayer);
+      n++;
+    });
+    toast(n?`${n}개 구간을 표시했습니다`:"이 범위에 해당 도로가 없습니다");
+  }catch(e){
+    toast("도로 정보를 불러오지 못했습니다");
+  }finally{ roadLoading=false; }
 }
 
 /* ── TourAPI 주변 명소 ── */
@@ -576,27 +721,21 @@ function drawModal(){
     <label>다녀온 날짜</label>
     <input type="date" id="f-date" value="${esc(f.date)}">
     <label>도로명 또는 코스명</label>
-    <input type="text" id="f-name" value="${esc(f.roadName)}" placeholder="예: 백수해안도로" oninput="checkSave()">
+    <input type="text" id="f-name" value="${esc(f.roadName)}" placeholder="예: 백수해안도로">
+    <label>도로 등급</label>
+    <div class="pick">${GRADES.map(g=>`<button onclick="setGrade('${g}')" style="${
+      f.grade===g?"background:var(--amber);color:var(--bg);border-color:transparent":""}">${g}</button>`).join("")}</div>
     <div class="two">
-      <div><label>도로 등급</label>
-        <select id="f-grade">
-          <option value="">선택 안 함</option>
-          ${GRADES.map(g=>`<option ${f.grade===g?"selected":""}>${g}</option>`).join("")}
-        </select></div>
       <div><label>도로 번호</label>
         <input type="number" id="f-roadno" value="${esc(f.roadNo)}" placeholder="예: 24"></div>
-    </div>
-    <label>차선</label>
-    <select id="f-lane">
-      <option value="">선택 안 함</option>
-      ${LANES.map(l=>`<option ${f.lane===l?"selected":""}>${l}</option>`).join("")}
-    </select>
-    <div class="two">
       <div><label>지역</label>
         <input type="text" id="f-region" value="${esc(f.region)}" placeholder="예: 영광"></div>
-      <div><label>거리(km)</label>
-        <input type="number" step="0.1" id="f-dist" value="${esc(f.distance)}" placeholder="선택"></div>
     </div>
+    <label>차선</label>
+    <div class="pick">${LANES.map(l=>`<button onclick="setLane('${l}')" style="${
+      f.lane===l?"background:var(--green);color:var(--text);border-color:transparent":""}">${l}</button>`).join("")}</div>
+    <label>거리(km)</label>
+    <input type="number" step="0.1" id="f-dist" value="${esc(f.distance)}" placeholder="선택">
     <label>테마</label>
     <div class="pick">${TAG_OPTIONS.map(t=>`<button onclick="togTag('${t}')" style="${
       f.tags.includes(t)?`background:${TAG_COLORS[t]};color:#fff;border-color:transparent`:""}">${t}</button>`).join("")}</div>
@@ -607,7 +746,7 @@ function drawModal(){
     <textarea id="f-memo" rows="3" placeholder="그날의 기억을 남겨보세요">${esc(f.memo)}</textarea>
     <div class="btns">
       <button class="cancel" onclick="closeModal()">취소</button>
-      <button class="save" id="saveBtn" onclick="addLog()" ${f.roadName.trim()?"":"disabled"}>저장</button>
+      <button class="save" id="saveBtn" onclick="addLog()">저장</button>
     </div>
   </div></div>`;
 }
@@ -615,16 +754,21 @@ function sync(){
   const g=i=>document.getElementById(i);
   if(!g("f-date")) return;
   form.date=g("f-date").value; form.roadName=g("f-name").value;
-  form.grade=g("f-grade").value; form.roadNo=g("f-roadno").value;
-  form.lane=g("f-lane").value; form.region=g("f-region").value;
+  form.roadNo=g("f-roadno").value; form.region=g("f-region").value;
   form.distance=g("f-dist").value; form.memo=g("f-memo").value;
 }
-function checkSave(){document.getElementById("saveBtn").disabled=!document.getElementById("f-name").value.trim()}
+function setGrade(v){sync();form.grade=(form.grade===v?"":v);drawModal()}
+function setLane(v){sync();form.lane=(form.lane===v?"":v);drawModal()}
 function togTag(t){sync();form.tags=form.tags.includes(t)?form.tags.filter(x=>x!==t):[...form.tags,t];drawModal()}
 function setRate(n){sync();form.rating=n;drawModal()}
 function addLog(){
   sync();
-  if(!form.roadName.trim())return;
+  if(!form.roadName.trim()){
+    toast("도로명 또는 코스명을 적어주세요");
+    const el=document.getElementById("f-name");
+    if(el){ el.style.borderColor="#B4453C"; el.focus(); }
+    return;
+  }
   logs=[{...form,id:String(Date.now())},...logs];
   save("drive-logs",logs);
   form=null; document.getElementById("modal").innerHTML="";
